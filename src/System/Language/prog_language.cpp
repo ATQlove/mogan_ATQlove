@@ -12,6 +12,7 @@
 
 #include "analyze.hpp"
 #include "convert.hpp"
+#include "converter.hpp"
 #include "cork.hpp"
 #include "impl_language.hpp"
 #include "iterator.hpp"
@@ -56,12 +57,25 @@ prog_language_rep::get_parser_config (string lan, string key) {
 void
 prog_language_rep::customize_keyword (keyword_parser_rep p_keyword_parser,
                                       tree               config) {
-  for (int i= 0; i < N (config); i++) {
-    tree   group_of_keywords= config[i];
-    string group            = get_label (group_of_keywords);
-    for (int j= 0; j < N (group_of_keywords); j++) {
-      string word= get_label (group_of_keywords[j]);
-      p_keyword_parser.put (word, group);
+  int config_N= N (config);
+  for (int i= 0; i < config_N; i++) {
+    tree   group_of_keywords  = config[i];
+    int    group_of_keywords_N= N (group_of_keywords);
+    string group              = get_label (group_of_keywords);
+    if (group == "extra_chars") {
+      for (int j= 0; j < group_of_keywords_N; j++) {
+        string extra_char= get_label (group_of_keywords[j]);
+        if (N (extra_char) == 1) {
+          p_keyword_parser.insert_extra_char (extra_char[0]);
+        }
+      }
+    }
+    else {
+      for (int j= 0; j < group_of_keywords_N; j++) {
+        string word= get_label (group_of_keywords[j]);
+        // number->string is actually number-<gtr>string
+        p_keyword_parser.put (utf8_to_cork (word), group);
+      }
     }
   }
 }
@@ -101,29 +115,39 @@ prog_language_rep::customize_number (tree config) {
 
 void
 prog_language_rep::customize_string (tree config) {
-  for (int i= 0; i < N (config); i++) {
-    tree   feature= config[i];
-    string name   = get_label (feature);
+  hashmap<string, string> pairs;
+  int                     config_N= N (config);
+  for (int i= 0; i < config_N; i++) {
+    tree   feature  = config[i];
+    string name     = get_label (feature);
+    int    feature_N= N (feature);
     if (name == "bool_features") {
-      for (int j= 0; j < N (feature); j++) {
+      for (int j= 0; j < feature_N; j++) {
         string key= get_label (feature[j]);
         escaped_char_parser.insert_bool_feature (key);
       }
     }
     else if (name == "escape_sequences") {
       array<string> escape_seq;
-      for (int j= 0; j < N (feature); j++) {
+      for (int j= 0; j < feature_N; j++) {
         string key= get_label (feature[j]);
         escape_seq << key;
       }
       escaped_char_parser.set_sequences (escape_seq);
     }
+    else if (name == "pairs") {
+      for (int j= 0; j < feature_N; j++) {
+        string key = get_label (feature[j]);
+        pairs (key)= key;
+      }
+    }
   }
 
   string_parser.set_escaped_char_parser (escaped_char_parser);
-  hashmap<string, string> pairs;
-  pairs ("\"")= "\"";
-  pairs ("\'")= "\'";
+  if (N (pairs) == 0) {
+    pairs ("\"")= "\"";
+    pairs ("\'")= "\'";
+  }
   string_parser.set_pairs (pairs);
   if (DEBUG_PARSER) debug_packrat << string_parser.to_string ();
 }
@@ -192,12 +216,12 @@ prog_language_rep::advance (tree t, int& pos) {
     current_parser= number_parser.get_parser_name ();
     return &tp_normal_rep;
   }
-  if (operator_parser.parse (s, pos)) {
-    current_parser= operator_parser.get_parser_name ();
-    return &tp_normal_rep;
-  }
   if (keyword_parser.parse (s, pos)) {
     current_parser= keyword_parser.get_parser_name ();
+    return &tp_normal_rep;
+  }
+  if (operator_parser.parse (s, pos)) {
+    current_parser= operator_parser.get_parser_name ();
     return &tp_normal_rep;
   }
   if (identifier_parser.parse (s, pos)) {
