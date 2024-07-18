@@ -37,13 +37,13 @@
 ; Copyright (c) 2024 The S7 SRFI Authors
 ; Follow the same License as the original one
 
-(provide 'srfi-78)
-(provide 'check)
-(provide 'check-set-mode!)
-(provide 'check-report)
-(provide 'check-reset!)
+(define-library (srfi srfi-78)
+(export check check-set-mode! check-report check-reset!
+        check-passed? check-failed?
+        check:proc)
+(begin
 
-(define check:write write)
+(define check:write display)
 
 (define check:mode #f)
 
@@ -59,12 +59,12 @@
 
 (check-set-mode! 'report)
 
-(define check:correct #f)
-(define check:failed   #f)
+(define check:correct 0)
+(define check:failed '())
 
 (define (check-reset!)
   (set! check:correct 0)
-  (set! check:failed   '()))
+  (set! check:failed '()))
 
 (define (check:add-correct!)
   (set! check:correct (+ check:correct 1)))
@@ -73,8 +73,6 @@
   (set! check:failed
         (cons (list expression actual-result expected-result)
               check:failed)))
-
-(check-reset!)
 
 (define (check:report-expression expression)
   (newline)
@@ -125,6 +123,9 @@
   (and (= (length check:failed) 0)
        (= check:correct expected-total-count)))
 
+(define (check-failed?)
+  (>= (length check:failed) 1))
+
 (define (check:proc expression thunk equal expected-result)
   (case check:mode
     ((0) #f)
@@ -157,4 +158,7 @@
 
 (define-macro (check expr => expected)
   `(check:proc ',expr (lambda () ,expr) equal? ,expected))
+
+) ; end of begin
+) ; end of define-library
 
